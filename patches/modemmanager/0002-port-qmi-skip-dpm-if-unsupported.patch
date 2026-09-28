@@ -1,0 +1,46 @@
+From: (to be filled in by the submitter)
+Subject: [PATCH] port-qmi: skip DPM if the QMI port doesn't provide it
+
+On some Qualcomm SoCs with an IPA data path (e.g. MSM8994 with IPA v2.0
+and MPSS.BO.2.5 firmware) the Data Port Mapper service is only reachable
+over QRTR, while the QMUX control channel used by ModemManager for
+DMS/NAS/WDS/WDA does not provide it.  On those platforms the hardware
+data port is opened by the platform (it also creates the control channel),
+so failing the whole data format setup because the DPM client cannot be
+allocated makes the modem unusable.
+
+Treat "service unsupported" as "DPM handled elsewhere" and continue with
+the WDA data format setup and link management.  Other allocation errors
+keep failing as before.
+
+--- a/src/mm-port-qmi.c
++++ b/src/mm-port-qmi.c
+@@ -1874,6 +1874,19 @@
+ 
+     ctx->dpm = qmi_device_allocate_client_finish (device, res, &error);
+     if (!ctx->dpm) {
++        /* Some platforms (e.g. MSM8994-era firmware) expose DPM only over
++         * QRTR, not on the QMUX control channel used for data; the hardware
++         * data port is then opened by the platform before the control
++         * channel even exists.  Skip the DPM steps in that case. */
++        if (g_error_matches (error, QMI_CORE_ERROR, QMI_CORE_ERROR_UNSUPPORTED) ||
++            g_error_matches (error, QMI_PROTOCOL_ERROR, QMI_PROTOCOL_ERROR_INVALID_SERVICE_TYPE)) {
++            mm_obj_dbg (g_task_get_source_object (task),
++                        "DPM service unsupported on this QMI port: skipping DPM port opening");
++            g_error_free (error);
++            ctx->step = INTERNAL_SETUP_DATA_FORMAT_STEP_GET_WDA_DATA_FORMAT;
++            internal_setup_data_format_context_step (task);
++            return;
++        }
+         g_task_return_error (task, error);
+         g_object_unref (task);
+         return;
+@@ -1967,7 +1980,7 @@
+ 
+         case INTERNAL_SETUP_DATA_FORMAT_STEP_DPM_OPEN:
+             /* Only for IPA based setups, open dpm port */
+-            if (g_strcmp0 (self->priv->net_driver, "ipa") == 0) {
++            if ((g_strcmp0 (self->priv->net_driver, "ipa") == 0) && ctx->dpm) {
+                 dpm_open_port (task);
+                 return;
+             }

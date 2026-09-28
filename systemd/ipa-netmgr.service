@@ -1,0 +1,21 @@
+[Unit]
+Description=Qualcomm IPA modem and data-path manager
+Documentation=file:/usr/share/doc/ipa-netmgr/README.md
+# The daemon starts the modem, runs the firmware quirks (DPM/WDA/SIM/radio)
+# and then serves the data path.  It must be up (READY=1) before ModemManager
+# initializes the modem: the quirks need the WDA service, which MM would
+# otherwise hold, and MM waits for a modem object that only exists afterwards.
+After=rmtfs.service
+Wants=rmtfs.service
+Before=ModemManager.service
+ConditionPathExists=/sys/class/remoteproc/remoteproc0
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/ipa-netmgr -c /etc/ipa-netmgr.conf
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

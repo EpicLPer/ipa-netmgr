@@ -1,0 +1,66 @@
+# ipa-netmgr configuration example (install as /etc/ipa-netmgr.conf).
+# Defaults below match the Lumia 950/950 XL (MSM8994, MPSS.BO.2.5) platform.
+
+# Data-path ownership: "linux" = the daemon owns the modem bring-up, the data
+# call and the interface setup; "android" = RIL owns the call and the daemon
+# only follows WDS indications and manages links.
+mode = linux
+
+# The daemon starts the modem (remoteproc) itself and runs the firmware quirks.
+# Set manage_modem=no to only manage the data path of an already running modem.
+manage_modem = yes
+modem_state = /sys/class/remoteproc/remoteproc0/state
+
+# QRTR node that serves the DPM/IPA services (this firmware: node 0).
+qrtr_node = 0
+
+# DPM session: held open for as long as the modem is up.
+dpm_enabled = yes
+control_port = DATA5_CNTL
+# QmiDataEndpointType: 4 = embedded, 5 = bam-dmux, 3 = pcie, 1 = hsusb
+control_ep_type = 4
+control_iface = 1
+hw_ep_type = 4
+hw_iface = 1
+hw_rx = 4
+hw_tx = 5
+
+# WDA data format: raw-ip link layer, QMAP aggregation (4-byte framing that
+# the mainline rmnet driver expects), embedded data endpoint.
+wda_enabled = yes
+# Candidate QMI channels, tried in order (the modem re-homes its services).
+qmi_devices = /dev/wwan0qmi1,/dev/wwan0qmi0
+wda_ep_type = 4
+wda_ep_iface = 1
+
+# Firmware quirks.
+at_device = /dev/wwan0at0
+home_plmn = 23203
+apn = internet.t-mobile.at
+# Automatic network selection first, explicit home PLMN as the fallback.
+# Automatic search is slow on this network, so the fallback follows quickly.
+registration_timeout_ms = 15000
+registration_manual_ms = 30000
+
+# Data call: in linux mode the daemon starts/stops the WDS call and sets up the
+# link; in android mode RIL owns the call and only the link is managed.
+call_enabled = yes
+profile = 1
+mux_id = 1
+subscription = 1
+
+# rmnet mux link created for the call (the IPA data interface is rmnet_ipa0)
+base_link = rmnet_ipa0
+link_name = rmnet_data%u
+prefix_len = 24
+
+# ModemManager resets the IPA data interface while it initializes the modem and
+# deletes the link; it is recreated a bounded number of times, not by
+# restarting the service.
+link_max_recreates = 5
+link_recreate_ms = 5000
+
+log_level = info
+# Bring-up retry backoff (first and capped step, milliseconds).
+retry_min_ms = 3000
+retry_max_ms = 60000
